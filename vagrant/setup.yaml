@@ -1,0 +1,31 @@
+---
+servers:
+  - type: provisioner
+    count: 1
+    # as many as possible cause https://forums.virtualbox.org/viewtopic.php?f=1&t=98106#p475731
+    cpu: 12
+    mem: 6144
+    os: centos/8
+  - type: master
+    count: 3
+    cpu: 4
+    mem: 12288
+    os: centos/8
+  - type: worker
+    count: 2
+    cpu: 2
+    mem: 4096
+    os: centos/8
+  - type: lb
+    count: 2
+    cpu: 1
+    mem: 1024
+    os: centos/8
+network:
+  net: "192.168.5."
+  provisioner_start: 1
+  master_start: 2
+  worker_start: 3
+  lb_start: 10
+
+...

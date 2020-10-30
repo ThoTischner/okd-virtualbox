@@ -1,0 +1,78 @@
+# -*- mode: ruby -*-
+# vi:set ft=ruby sw=2 ts=2 sts=2:
+
+# Require YAML module
+require 'yaml'
+
+# Read YAML file with box details
+setup = YAML.load_file('setup.yaml')
+
+Vagrant.configure("2") do |config|
+
+  # Disable automatic box update checking. If you disable this, then
+  # boxes will only be checked for updates when the user runs
+  # `vagrant box outdated`. This is not recommended.
+  config.vm.box_check_update = false
+
+  setup["servers"].each do |item|
+  # Provision servers
+  (1..item["count"]).each do |i|
+      config.vm.define "#{item['type']}-#{i}" do |node|
+        node.vm.box = "#{item['os']}"
+        node.vm.disk :disk, size: "50GB", primary: true
+
+        node.vm.provider "virtualbox" do |vb|
+            vb.name = "#{item['type']}-#{i}"
+            vb.memory = "#{item['mem']}"
+            vb.cpus = "#{item['cpu']}"
+
+            # DNS also inside vms
+            vb.customize [
+                     "modifyvm", :id,
+                     "--natdnshostresolver1", "on",
+                     # some systems also need this:
+                     # "--natdnshostresolver2", "on"
+                   ]
+
+            # Enable nested virtualization
+            vb.customize [
+                     "modifyvm", :id,
+                     "--nested-hw-virt", "on",
+                               ]
+
+            # First NIC as nat-network so vms can reach each other
+            #vb.customize ['modifyvm', :id, '--nic1', 'natnetwork', '--nat-network1', 'okd-virtualbox']
+        end
+
+        # DNS
+        node.vm.hostname = "#{item['type']}-#{i}"
+        node.dns.tld = "okd.virtualbox"
+        if "#{item['type']}" == "lb" && "#{i}" == "1"
+        then
+            node.dns.patterns = [/^.*api\.okd\.virtualbox$/, /^.*api-int\.okd\.virtualbox$/]
+        end
+        if "#{item['type']}" == "lb" && "#{i}" == "2"
+        then
+            node.dns.patterns = [/^.*apps\.okd\.virtualbox$/]
+        end
+
+        nw_type_start = "#{item['type']}_start"
+
+        # baremetal network
+        node.vm.network "private_network", ip: "#{setup['network']['net']}" + "#{setup['network'][nw_type_start]}"+ "#{i}", hostname: true
+        # provisioning network
+        node.vm.network "private_network", auto_config: false, ip: "172.22.0.1" + "#{i}"
+
+
+        # fix ssh for nat-network on eth0 hack
+        #node.vm.network :forwarded_port, id: 'ssh', guest: 22, host: "#{2710 + i}"
+        #node.ssh.guest_port = "#{2710 + i}"
+
+        # config scripts
+        node.vm.provision "setup-hosts", :type => "shell", :path => "scripts/setup-hosts.sh" do |s|
+          s.args = ["eth1"]
+        end
+      end
+    end
+  end
+end
